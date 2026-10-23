@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const String kModel = 'gemini-2.0-flash';
+const String kModel = 'gemini-flash-latest';
 
 const String kSystemPrompt = '''
 तिमी एक नेपाली सहायक हौ। सधैं देवनागरी नेपालीमा छोटो र मिलनसार जवाफ देऊ।
