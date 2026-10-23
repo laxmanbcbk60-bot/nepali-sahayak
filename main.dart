@@ -158,7 +158,7 @@ class _ChatPageState extends State<ChatPage> {
     _add(true, text);
     setState(() => _busy = true);
     try {
-      final result = await _ask(text);
+    actions:final result = await _ask(text);
       final reply = (result['reply'] ?? '').toString();
       _add(false, reply);
       await _tts.speak(reply);
@@ -254,7 +254,10 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('मेरो सहायक'),
+        title: GestureDetector(
+  onLongPress: _openSettings,
+  child: const Text('मेरो सहायक'),
+),
         actions: [
           IconButton(icon: const Icon(Icons.settings), onPressed: _openSettings),
         ],
