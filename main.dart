@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const String kModel = 'gemini-flash-latest';
+const String kDefaultModel = 'gemini-3.5-flash';
 
 const String kSystemPrompt = '''
 तिमी एक नेपाली सहायक हौ। सधैं देवनागरी नेपालीमा छोटो र मिलनसार जवाफ देऊ।
@@ -50,6 +50,7 @@ class _ChatPageState extends State<ChatPage> {
   final List<Msg> _msgs = [];
   final List<Map<String, dynamic>> _history = [];
   String _apiKey = '';
+  String _model = kDefaultModel;
   bool _sttReady = false;
   bool _listening = false;
   bool _busy = false;
@@ -63,6 +64,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     _apiKey = prefs.getString('api_key') ?? '';
+    _model = prefs.getString('model') ?? kDefaultModel;
     _sttReady = await _stt.initialize(
       onStatus: (s) {
         if (s == 'done' || s == 'notListening') {
@@ -75,26 +77,41 @@ class _ChatPageState extends State<ChatPage> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _saveKey(String key) async {
+  Future<void> _saveSettings(String key, String model) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('api_key', key.trim());
-    setState(() => _apiKey = key.trim());
+    await prefs.setString('model', model.trim());
+    setState(() {
+      _apiKey = key.trim();
+      _model = model.trim().isEmpty ? kDefaultModel : model.trim();
+      _history.clear();
+    });
   }
 
   void _openSettings() {
-    final c = TextEditingController(text: _apiKey);
+    final keyC = TextEditingController(text: _apiKey);
+    final modelC = TextEditingController(text: _model);
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('सेटिङ'),
-        content: TextField(
-          controller: c,
-          decoration: const InputDecoration(labelText: 'Gemini API Key'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: keyC,
+              decoration: const InputDecoration(labelText: 'Gemini API Key'),
+            ),
+            TextField(
+              controller: modelC,
+              decoration: const InputDecoration(labelText: 'मोडेलको नाम'),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () {
-              _saveKey(c.text);
+              _saveSettings(keyC.text, modelC.text);
               Navigator.pop(context);
             },
             child: const Text('सेभ गर्नुहोस्'),
@@ -150,7 +167,10 @@ class _ChatPageState extends State<ChatPage> {
         (result['target'] ?? '').toString(),
       );
     } catch (e) {
-      _add(false, 'केही समस्या आयो: $e');
+      final safe = e
+          .toString()
+          .replaceAll(RegExp(r'key=[^&\s]+'), 'key=***');
+      _add(false, 'केही समस्या आयो: $safe');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -164,7 +184,7 @@ class _ChatPageState extends State<ChatPage> {
       ]
     });
     final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/$kModel:generateContent?key=$_apiKey',
+      'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent?key=$_apiKey',
     );
     final res = await http.post(
       url,
@@ -179,20 +199,15 @@ class _ChatPageState extends State<ChatPage> {
         'generationConfig': {'responseMimeType': 'application/json'},
       }),
     );
-    if (res.statusCode == 429) {
-      _history.removeLast();
-      return {
-        'reply': 'सर्भर व्यस्त छ, केही बेर पछि फेरि प्रयास गर्नुहोस् (429)।',
-        'action': 'none',
-        'target': ''
-      };
-    }
     if (res.statusCode != 200) {
       _history.removeLast();
-      throw 'Error ${res.statusCode}';
+      final body = utf8.decode(res.bodyBytes);
+      final short = body.length > 400 ? body.substring(0, 400) : body;
+      throw 'मोडेल: $_model, कोड ${res.statusCode}\n$short';
     }
     final data = jsonDecode(utf8.decode(res.bodyBytes));
-    final out = data['candidates'][0]['content']['parts'][0]['text'] as String;
+    final parts = data['candidates'][0]['content']['parts'] as List;
+    final out = parts.map((p) => p['text'] ?? '').join();
     _history.add({
       'role': 'model',
       'parts': [
