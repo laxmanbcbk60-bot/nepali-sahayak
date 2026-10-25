@@ -1,1 +1,45 @@
+name: Build debug APK
 
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: project.zip खोल्ने (भए मात्र)
+        run: |
+          if [ -f project.zip ]; then
+            unzip -o project.zip -x ".github/*" -d .
+            rm project.zip
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "project.zip बाट प्रोजेक्ट फाइलहरू थपियो"
+            git push
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Debug APK बनाउने
+        run: gradle assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nepali-sahayak-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
